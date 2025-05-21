@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multiplayer Spelling Bee</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <!-- PeerJS for local network communication -->
+  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  <style>
+    /* Mobile-specific styles */
+    @media (max-width: 640px) {
+      .honeycomb-container svg {
+        width: 95vw;
+        height: auto;
+      }
+      
+      #word-input {
+        font-size: 16px; /* Prevent iOS zoom on input */
+      }
+    }
+    
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+      .dark-mode-support {
+        background-color: #1a202c;
+        color: #e2e8f0;
+      }
+    }
+    
+    /* Animation for notifications */
+    @keyframes fadeInOut {
+      0% { opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    
+    .notification-animation {
+      animation: fadeInOut 2s ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 font-sans dark-mode-support">
+  <div class="container mx-auto p-4 max-w-2xl">
+    <h1 class="text-3xl font-bold text-center mb-2">Multiplayer Spelling Bee</h1>
+    
+    <!-- Connection Setup -->
+    <div id="connection-setup" class="mb-6 bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+      <h2 class="text-xl font-semibold mb-3">Join Game</h2>
+      <div class="flex flex-col space-y-4">
+        <div>
+          <label for="player-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Your Name:</label>
+          <input type="text" id="player-name" class="w-full p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md" placeholder="Enter your name">
+        </div>
+        
+        <div class="flex flex-col space-y-2">
+          <div class="grid grid-cols-2 gap-2">
+            <button id="host-game" class="bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 text-lg">Host New Game</button>
+            <button id="join-game-btn" class="bg-green-600 text-white py-3 px-4 rounded-md hover:bg-green-700 text-lg">Join Game</button>
+          </div>
+          
+          <div id="join-form" class="hidden flex flex-col space-y-2">
+            <input type="text" id="host-id" class="p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md" placeholder="Enter Game Code">
+            <button id="connect-to-host" class="bg-green-600 text-white py-3 px-4 rounded-md hover:bg-green-700">Connect</button>
+          </div>
+          
+          <div id="custom-id-form" class="hidden mt-2 flex flex-col space-y-2">
+            <p class="text-sm text-gray-600 dark:text-gray-400">Create a custom game code (optional):</p>
+            <div class="flex space-x-2">
+              <input type="text" id="custom-id-input" class="flex-1 p-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md" placeholder="Enter custom code">
+              <button id="use-custom-id" class="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700">Use</button>
+            </div>
+          </div>
+          
+          <div id="host-info" class="hidden mt-3 p-3 bg-gray-100 dark:bg-gray-700 rounded-md">
+            <p class="text-sm mb-2">Share this Game Code with others to join:</p>
+            <div class="flex">
+              <input type="text" id="my-peer-id" class="flex-1 p-3 text-lg font-medium border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded-l-md bg-white text-center" readonly>
+              <button id="copy-id" class="bg-gray-600 text-white py-2 px-4 rounded-r-md hover:bg-gray-700">Copy</button>
+            </div>
+            <div class="mt-3 flex justify-center">
+              <button id="start-game" class="bg-green-600 text-white py-3 px-6 rounded-md hover:bg-green-700 text-lg">Start Game</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Game UI (hidden until connected) -->
+    <div id="game-container" class="hidden">
+      <!-- Game Status Bar -->
+      <div class="mb-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+        <div class="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full mb-2">
+          <div id="progress-bar" class="bg-yellow-400 h-2 rounded-full" style="width: 0%"></div>
+        </div>
+        <div class="flex justify-between items-center">
+          <span id="game-rating" class="text-sm font-medium">Beginner - 0%</span>
+          <span id="total-score" class="text-sm font-medium">Team Score: 0</span>
+        </div>
+      </div>
+      
+      <!-- Game Stats -->
+      <div class="grid grid-cols-3 gap-4 mb-4">
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow text-center">
+          <div class="text-2xl font-bold" id="points-display">0</div>
+          <div class="text-xs text-gray-600 dark:text-gray-400">Points</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow text-center">
+          <div class="text-2xl font-bold" id="words-display">0</div>
+          <div class="text-xs text-gray-600 dark:text-gray-400">Words</div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow text-center">
+          <div class="text-2xl font-bold" id="pangrams-display">0</div>
+          <div class="text-xs text-gray-600 dark:text-gray-400">Pangrams</div>
+        </div>
+      </div>
+      
+      <!-- Game Feedback Message -->
+      <div id="message-container" class="hidden mb-4 p-3 rounded-md text-center"></div>
+      
+      <!-- Player Activity Feed -->
+      <div id="activity-feed" class="fixed top-4 right-4 max-w-xs z-50"></div>
+      
+      <!-- Input Area -->
+      <div class="mb-4">
+        <div class="relative">
+          <input type="text" id="word-input" class="w-full p-3 pr-10 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md shadow-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent" placeholder="Enter word" autocapitalize="characters" autocomplete="off">
+          <button id="clear-btn" class="absolute right-3 top-3 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </div>
+        <button id="submit-btn" class="w-full mt-2 bg-yellow-500 text-white py-3 rounded-md hover:bg-yellow-600 text-lg">Enter</button>
+      </div>
+      
+      <!-- Honeycomb Grid -->
+      <div class="flex justify-center mb-6 honeycomb-container">
+        <svg viewBox="0 0 240 208" class="w-64 h-64">
+          <defs>
+            <polygon id="hexShape" points="30,0 15,-26 -15,-26 -30,0 -15,26 15,26" stroke-width="1" />
+          </defs>
+          
+          <!-- Center letter -->
+          <g transform="translate(120, 104)">
+            <use href="#hexShape" fill="#FBBF24" stroke="#000000" id="center-letter-hex" class="cursor-pointer" />
+            <text x="0" y="5" text-anchor="middle" font-size="20" font-weight="bold" pointer-events="none" id="center-letter">A</text>
+          </g>
+
+          <!-- Top -->
+          <g transform="translate(120, 52)">
+            <use href="#hexShape" fill="#E5E7EB" stroke="#000000" id="letter-0-hex" class="cursor-pointer" />
+            <text x="0" y="5" text-anchor="middle" font-size="20" font-weight="bold" pointer-events="none" id="letter-0">R</text>
+          </g>
+
+          <!-- Top Right -->
+          <g transform="translate(167, 78)">
+            <use href="#hexShape" fill="#E5E7EB" stroke="#000000" id="letter-1-hex" class="cursor-pointer" />
+            <text x="0" y="5" text-anchor="middle" font-size="20" font-weight="bold" pointer-events="none" id="letter-1">L</text>
+          </g>
+
+          <!-- Bottom Right -->
+          <g transform="translate(167, 130)">
+            <use href="#hexShape" fill="#E5E7EB" stroke="#000000" id="letter-2-hex" class="cursor-pointer" />
+            <text x="0" y="5" text-anchor="middle" font-size="20" font-weight="bold" pointer-events="none" id="letter-2">U</text>
+          </g>
+
+          <!-- Bottom -->
+          <g transform="translate(120, 156)">
+            <use href="#hexShape" fill="#E5E7EB" stroke="#000000" id="letter-3-hex" class="cursor-pointer" />
+            <text x="0" y="5" text-anchor="middle" font-size="20" font-weight="bold" pointer-events="none" id="letter-3">N</text>
+          </g>
+
+          <!-- Bottom Left -->
+          <g transform="translate(73, 130)">
+            <use href="#hexShape" fill="#E5E7EB" stroke="#000000" id="letter-4-hex" class="cursor-pointer" />
+            <text x="0" y="5" text-anchor="middle" font-size="20" font-weight="bold" pointer-events="none" id="letter-4">V</text>
+          </g>
+
+          <!-- Top Left -->
+          <g transform="translate(73, 78)">
+            <use href="#hexShape" fill="#E5E7EB" stroke="#000000" id="letter-5-hex" class="cursor-pointer" />
+            <text x="0" y="5" text-anchor="middle" font-size="20" font-weight="bold" pointer-events="none" id="letter-5">E</text>
+          </g>
+        </svg>
+      </div>
+      
+      <!-- Found Words and Players Area -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Found Words Section -->
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+          <h2 class="font-semibold mb-2">Found Words (<span id="found-count">0</span>/<span id="total-words">0</span>)</h2>
+          <div id="found-words" class="max-h-48 overflow-y-auto p-2 bg-gray-50 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-700">
+            <p class="text-gray-500 dark:text-gray-400 text-sm">Found words will appear here</p>
+          </div>
+        </div>
+        
+        <!-- Players Section -->
+        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+          <h2 class="font-semibold mb-2">Players</h2>
+          <div id="players-list" class="max-h-48 overflow-y-auto p-2 bg-gray-50 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-700">
+            <p class="text-gray-500 dark:text-gray-400 text-sm">Connecting to players...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Game Data
+      const wordList = [
+        "ALLELE", "ALLURE", "ALLURER", "ALURE", "ANAL", "ANEAR", "ANNAL", "ANNEAL", 
+        "ANNEALER", "ANNUAL", "ANNUL", "ANNULAR", "AREA", "AREAL", "AREAR", "ARENA", 
+        "ARENE", "ARERE", "ARREAR", "AURA", "AURAE", "AURAL", "AVENUE", "AVER", 
+        "EARL", "EARN", "EARNER", "EAVE", "ELAN", "LANE", "LANNER", "LAREE", 
+        "LARVA", "LARVAE", "LARVAL", "LAURAE", "LAUREL", "LAVA", "LAVE", "LAVEER", 
+        "LAVER", "LEALER", "LEAN", "LEANER", "LEAR", "LEARN", "LEARNER", "LEAVE", 
+        "LEAVEN", "LEAVER", "LERNAEAN", "LERNEAN", "LUAU", "LUNA", "LUNAR", "LUNULA", 
+        "LUNULAE", "NAAN", "NANA", "NARE", "NAVAL", "NAVE", "NAVEL", "NEAR", 
+        "NEARER", "NERAL", "NERVAL", "NERVULAR", "NEURAL", "NEURULA", "NEURULAE", "NEURULAR", 
+        "RALE", "RANEE", "RARE", "RAREE", "RARER", "RAVE", "RAVEL", "RAVELER", 
+        "RAVELLER", "RAVEN", "RAVENALA", "RAVENER", "RAVER", "REAL", "REALER", "REAN", 
+        "REAR", "REARER", "REAVE", "REAVER", "REEARN", "RELEARN", "RENAL", "RERAN", 
+        "REVALUE", "REVEAL", "REVEALER", "REVENUAL", "RURAL", "ULNA", "ULNAE", "ULNAR", 
+        "ULNARE", "UNLEARN", "UNRAVEL", "UNRAVELER", "UNREAL", "UNREAVE", "URARE", "UREA", 
+        "UREAL", "URENA", "UVEA", "UVULA", "UVULAE", "UVULAR", "VALE", "VALUE", 
+        "VALUER", "VALVE", "VANE", "VANNER", "VARE", "VARVE", "VARVEL", "VEAL", 
+        "VEALER", "VELAR", "VENAL", "VENEREAL", "VENEREAN", "VENULA", "VENULAR", "VERA", 
+        "VERLAN", "VERNAL", "VERRA", "VULVA", "VULVAE", "VULVAL", "VULVAR"
+      ];
+
+      // Game letters
+      const centerLetter = 'A';
+      const outerLetters = ['R', 'L', 'U', 'N', 'V', 'E'];
+      const letters = [centerLetter, ...outerLetters];
+      
+      // Find pangrams (words that use all 7 letters)
+      const pangrams = wordList.filter(word => {
+        const wordLetters = new Set(word.split(''));
+        return letters.every(letter => wordLetters.has(letter));
+      });
+      
+      // Find perfect pangrams (words that ONLY use the 7 letters)
+      const perfectPangrams = pangrams.filter(word => {
+        return word.split('').every(letter => letters.includes(letter));
+      });
+      
+      // Calculate total possible score
+      const totalPossibleScore = wordList.reduce((total, word) => {
+        if (perfectPangrams.includes(word)) return total + word.length + 7;
+        if (pangrams.includes(word)) return total + word.length + 7;
+        return total + (word.length === 4 ? 1 : word.length);
+      }, 0);
+      
+      // Update total word count display
+      document.getElementById('total-words').textContent = wordList.length;
+      
+      // Game state
+      let gameState = {
+        foundWords: [],
+        players: {},
+        totalScore: 0,
+        gameStarted: false
+      };
+      
+      // Connection state
+      let peer;
+      let connections = [];
+      let playerName = '';
+      let playerId = '';
+      let isHost = false;
+      
+      // DOM elements
+      const connectionSetup = document.getElementById('connection-setup');
+      const gameContainer = document.getElementById('game-container');
+      const playerNameInput = document.getElementById('player-name');
+      const hostGameBtn = document.getElementById('host-game');
+      const joinGameBtn = document.getElementById('join-game-btn');
+      const joinForm = document.getElementById('join-form');
+      const hostIdInput = document.getElementById('host-id');
+      const connectToHostBtn = document.getElementById('connect-to-host');
+      const hostInfo = document.getElementById('host-info');
+      const myPeerIdInput = document.getElementById('my-peer-id');
+      const copyIdBtn = document.getElementById('copy-id');
+      const customIdForm = document.getElementById('custom-id-form');
+      const customIdInput = document.getElementById('custom-id-input');
+      const useCustomIdBtn = document.getElementById('use-custom-id');
+      const startGameBtn = document.getElementById('start-game');
+      
+      const wordInput = document.getElementById('word-input');
+      const clearBtn = document.getElementById('clear-btn');
+      const submitBtn = document.getElementById('submit-btn');
+      const messageContainer = document.getElementById('message-container');
+      const foundWordsContainer = document.getElementById('found-words');
+      const playersListContainer = document.getElementById('players-list');
+      const activityFeed = document.getElementById('activity-feed');
+      
+      const progressBar = document.getElementById('progress-bar');
+      const gameRating = document.getElementById('game-rating');
+      const totalScoreDisplay = document.getElementById('total-score');
+      const pointsDisplay = document.getElementById('points-display');
+      const wordsDisplay = document.getElementById('words-display');
+      const pangramsDisplay = document.getElementById('pangrams-display');
+      const foundCountDisplay = document.getElementById('found-count');
+      
+      // Initialize hexagon click handlers
+      for (let i = 0; i < outerLetters.length; i++) {
+        document.getElementById(`letter-${i}-hex`).addEventListener('click', () => {
+          addLetter(outerLetters[i]);
+        });
+        document.getElementById(`letter-${i}`).textContent = outerLetters[i];
+      }
+      
+      document.getElementById('center-letter-hex').addEventListener('click', () => {
+        addLetter(centerLetter);
+      });
+      document.getElementById('center-letter').textContent = centerLetter;
+      
+      // Add letter to input
+      function addLetter(letter) {
+        wordInput.value += letter;
+        wordInput.focus();
+      }
+      
+      // Clear input
+      clearBtn.addEventListener('click', () => {
+        wordInput.value = '';
+        wordInput.focus();
+      });
+      
+      // Submit word
+      function submitWord() {
+        const word = wordInput.value.trim().toUpperCase();
+        
+        // Check if word is valid
+        if (word.length < 4) {
+          showMessage('Word must be at least 4 letters', 'error');
+          return;
+        }
+        
+        if (!word.includes(centerLetter)) {
+          showMessage(`Word must contain the center letter ${centerLetter}`, 'error');
+          return;
+        }
+        
+        // Check if word contains only valid letters
+        if (!word.split('').every(letter => letters.includes(letter))) {
+          showMessage('Word contains invalid letters', 'error');
+          return;
+        }
+        
+        // Check if word is in the list
+        if (!wordList.includes(word)) {
+          showMessage('Not in word list', 'error');
+          return;
+        }
+        
+        // Check if word has already been found
+        if (gameState.foundWords.includes(word)) {
+          showMessage('Already found', 'error');
+          return;
+        }
+        
+        // Calculate score for the word
+        let wordScore = 0;
+        let messageText = '';
+        
+        if (perfectPangrams.includes(word)) {
+          wordScore = word.length + 7;  // Perfect pangram bonus
+          messageText = `Perfect pangram! +${wordScore}`;
+        } else if (pangrams.includes(word)) {
+          wordScore = word.length + 7;  // Pangram bonus
+          messageText = `Pangram! +${wordScore}`;
+        } else {
+          wordScore = word.length === 4 ? 1 : word.length;
+          messageText = `+${wordScore}`;
+        }
+        
+        // Send word to all players
+        const wordData = {
+          type: 'word-found',
+          word: word,
+          score: wordScore,
+          foundBy: playerName,
+          playerId: playerId
+        };
+        
+        // If host, process locally first
+        if (isHost) {
+          processWordFound(wordData);
+        }
+        
+        // Send to all connections
+        sendToAllPeers(wordData);
+        
+        // Clear input
+        wordInput.value = '';
+        showMessage(messageText, 'success');
+      }
+      
+      submitBtn.addEventListener('click', submitWord);
+      wordInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          submitWord();
+        }
+      });
+      
+      // Show message
+      function showMessage(text, type) {
+        messageContainer.textContent = text;
+        messageContainer.className = 'mb-4 p-3 rounded-md text-center';
+        
+        if (type === 'success') {
+          messageContainer.classList.add('bg-green-100', 'text-green-800', 'dark:bg-green-900', 'dark:text-green-200');
+        } else {
+          messageContainer.classList.add('bg-red-100', 'text-red-800', 'dark:bg-red-900', 'dark:text-red-200');
+        }
+        
+        messageContainer.classList.remove('hidden');
+        
+        setTimeout(() => {
+          messageContainer.classList.add('hidden');
+        }, 2000);
+      }
+      
+      // Show activity notification
+      function showActivityNotification(text, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = 'notification-animation p-2 mt-2 rounded-md text-sm';
+        
+        if (type === 'success') {
+          notification.classList.add('bg-green-100', 'text-green-800', 'dark:bg-green-900', 'dark:text-green-200');
+        } else if (type === 'error') {
+          notification.classList.add('bg-red-100', 'text-red-800', 'dark:bg-red-900', 'dark:text-red-200');
+        } else if (type === 'player') {
+          notification.classList.add('bg-blue-100', 'text-blue-800', 'dark:bg-blue-900', 'dark:text-blue-200');
+        } else {
+          notification.classList.add('bg-gray-100', 'text-gray-800', 'dark:bg-gray-800', 'dark:text-gray-200');
+        }
+        
+        notification.textContent = text;
+        activityFeed.appendChild(notification);
+        
+        setTimeout(() => {
+          notification.remove();
+        }, 3000);
+      }
+      
+      // Process a found word (for host)
+      function processWordFound(data) {
+        if (gameState.foundWords.includes(data.word)) {
+          return; // Word already found
+        }
+        
+        console.log('Processing new word:', data.word);
+        
+        // Add word to found words
+        gameState.foundWords.push(data.word);
+        
+        // Update player score
+        if (!gameState.players[data.playerId]) {
+          gameState.players[data.playerId] = {
+            name: data.foundBy,
+            score: 0,
+            words: []
+          };
+        }
+        
+        gameState.players[data.playerId].score += data.score;
+        gameState.players[data.playerId].words.push(data.word);
+        
+        // Update total score
+        gameState.totalScore += data.score;
+        
+        // Show notification for others' found words
+        if (data.playerId !== playerId) {
+          showActivityNotification(`${data.foundBy} found "${data.word}" (+${data.score})`, 'success');
+        }
+        
+        // Update UI
+        updateGameUI();
+        
+        console.log('Updated game state:', gameState);
+      }
+      
+      // Update game UI
+      function updateGameUI() {
+        // Update found words
+        if (gameState.foundWords.length === 0) {
+          foundWordsContainer.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-sm">Found words will appear here</p>';
+        } else {
+          foundWordsContainer.innerHTML = '';
+          
+          const sortedWords = [...gameState.foundWords].sort();
+          sortedWords.forEach(word => {
+            const wordSpan = document.createElement('span');
+            wordSpan.textContent = word;
+            wordSpan.className = `inline-block text-sm px-2 py-1 m-1 rounded-md ${
+              perfectPangrams.includes(word) 
+                ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' 
+                : pangrams.includes(word) 
+                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' 
+                  : 'bg-gray-100 dark:bg-gray-700'
+            }`;
+            foundWordsContainer.appendChild(wordSpan);
+          });
+        }
+        
+        // Update players list
+        playersListContainer.innerHTML = '';
+        
+        Object.entries(gameState.players).forEach(([id, player]) => {
+          const playerDiv = document.createElement('div');
+          playerDiv.className = 'p-2 border-b border-gray-200 dark:border-gray-700 last:border-none';
+          
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'font-medium';
+          nameSpan.textContent = player.name + (id === playerId ? ' (You)' : '');
+          
+          const scoreSpan = document.createElement('span');
+          scoreSpan.className = 'ml-2 text-gray-600 dark:text-gray-400';
+          scoreSpan.textContent = `${player.score} points (${player.words?.length || 0} words)`;
+          
+          playerDiv.appendChild(nameSpan);
+          playerDiv.appendChild(scoreSpan);
+          playersListContainer.appendChild(playerDiv);
+        });
+        
+        // Update stats
+        const totalFound = gameState.foundWords.length;
+        const totalPangrams = gameState.foundWords.filter(word => pangrams.includes(word)).length;
+        
+        pointsDisplay.textContent = gameState.totalScore;
+        wordsDisplay.textContent = totalFound;
+        pangramsDisplay.textContent = totalPangrams;
+        foundCountDisplay.textContent = totalFound;
+        
+        // Update progress
+        const percentComplete = Math.round((gameState.totalScore / totalPossibleScore) * 100);
+        progressBar.style.width = `${percentComplete}%`;
+        
+        // Update rating
+        let rating = 'Beginner';
+        if (percentComplete < 2) rating = 'Beginner';
+        else if (percentComplete < 5) rating = 'Good Start';
+        else if (percentComplete < 8) rating = 'Moving Up';
+        else if (percentComplete < 15) rating = 'Good';
+        else if (percentComplete < 25) rating = 'Solid';
+        else if (percentComplete < 40) rating = 'Great';
+        else if (percentComplete < 50) rating = 'Amazing';
+        else if (percentComplete < 70) rating = 'Genius';
+        else if (percentComplete === 100) rating = 'Queen Bee!';
+        else rating = 'Master';
+        
+        gameRating.textContent = `${rating} - ${percentComplete}%`;
+        totalScoreDisplay.textContent = `Team Score: ${gameState.totalScore}`;
+      }
+      
+      // Generate a friendly code
+      function generateFriendlyCode() {
+        const adjectives = ['happy', 'sunny', 'clever', 'brave', 'mighty', 'jolly', 'fancy', 'lucky'];
+        const animals = ['panda', 'tiger', 'eagle', 'dolphin', 'koala', 'rabbit', 'turtle', 'lion'];
+        const numbers = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        
+        const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+        const animal = animals[Math.floor(Math.random() * animals.length)];
+        
+        return `${adjective}-${animal}-${numbers}`;
+      }
+      
+      // Host game
+      hostGameBtn.addEventListener('click', () => {
+        playerName = playerNameInput.value.trim();
+        if (!playerName) {
+          alert('Please enter your name');
+          return;
+        }
+        
+        // Show custom ID option
+        customIdForm.classList.remove('hidden');
+        hostGameBtn.disabled = true;
+        joinGameBtn.disabled = true;
+      });
+      
+      // Use custom ID
+      useCustomIdBtn.addEventListener('click', () => {
+        const customId = customIdInput.value.trim();
+        if (customId) {
+          initializePeer(true, customId);
+        } else {
+          const friendlyCode = generateFriendlyCode();
+          initializePeer(true, friendlyCode);
+        }
+      });
+      
+      // Show join form
+      joinGameBtn.addEventListener('click', () => {
+        playerName = playerNameInput.value.trim();
+        if (!playerName) {
+          alert('Please enter your name');
+          return;
+        }
+        
+        joinForm.classList.remove('hidden');
+      });
+      
+      // Connect to host
+      connectToHostBtn.addEventListener('click', () => {
+        const hostId = hostIdInput.value.trim();
+        if (!hostId) {
+          alert('Please enter a game code');
+          return;
+        }
+        
+        initializePeer(false, hostId);
+      });
+      
+      // Start game (host only)
+      startGameBtn.addEventListener('click', () => {
+        if (isHost) {
+          gameState.gameStarted = true;
+          
+          // Hide setup UI, but don't close the Peer connection
+          // This is critical - we still allow players to join after game starts
+          connectionSetup.classList.add('hidden');
+          
+          // Send game started message to all players
+          sendToAllPeers({
+            type: 'game-started'
+          });
+          
+          showActivityNotification('Game started! Players can still join with your code.', 'success');
+        }
+      });
+      
+      // Copy ID
+      copyIdBtn.addEventListener('click', () => {
+        myPeerIdInput.select();
+        document.execCommand('copy');
+        
+        copyIdBtn.textContent = 'Copied!';
+        setTimeout(() => {
+          copyIdBtn.textContent = 'Copy';
+        }, 2000);
+      });
+      
+      // Initialize PeerJS
+      function initializePeer(asHost, customId = null) {
+        // Generate a random ID if not provided
+        playerId = 'bee-' + Math.random().toString(36).substr(2, 9);
+        
+        // Create peer with custom ID if provided
+        if (asHost && customId) {
+          peer = new Peer(customId, {
+            // Use a STUN server to help with NAT traversal
+            config: {
+              'iceServers': [
+                { urls: 'stun:stun.l.google.com:19302' }
+              ]
+            },
+            debug: 2 // More detailed logs
+          });
+        } else {
+          // For non-hosts, just create a random peer ID
+          peer = new Peer(null, {
+            config: {
+              'iceServers': [
+                { urls: 'stun:stun.l.google.com:19302' }
+              ]
+            },
+            debug: 2
+          });
+        }
+        
+        // Set host flag
+        isHost = asHost;
+        
+        // Initialize UI
+        if (asHost) {
+          // Add self to players
+          gameState.players[playerId] = {
+            name: playerName,
+            score: 0,
+            words: []
+          };
+        }
+        
+        // When peer is open
+        peer.on('open', (id) => {
+          console.log('Peer connection open with ID:', id);
+          
+          if (asHost) {
+            // For host, store the game code to use for joining
+            myPeerIdInput.value = customId || id;
+            
+            hostInfo.classList.remove('hidden');
+            customIdForm.classList.add('hidden');
+            hostGameBtn.disabled = false;
+            joinGameBtn.disabled = false;
+            gameContainer.classList.remove('hidden');
+            updateGameUI();
+            
+            showActivityNotification('Game created! Share the code with players', 'success');
+          } else {
+            // For players, connect to the host using the provided game code
+            const hostId = hostIdInput.value.trim();
+            console.log('Connecting to host:', hostId);
+            
+            const conn = peer.connect(hostId, {
+              metadata: {
+                name: playerName,
+                id: playerId
+              },
+              reliable: true
+            });
+            
+            if (conn) {
+              setupConnection(conn);
+              
+              // Hide join form
+              joinForm.classList.add('hidden');
+              
+              showActivityNotification('Connecting to game...', 'info');
+            } else {
+              showActivityNotification('Failed to connect to game', 'error');
+            }
+          }
+        });
+        
+        // Listen for incoming connections
+        peer.on('connection', (conn) => {
+          console.log('Incoming connection from:', conn.peer);
+          setupConnection(conn);
+          
+          if (isHost) {
+            showActivityNotification(`${conn.metadata.name} is joining the game`, 'player');
+          }
+        });
+        
+        // Error handling
+        peer.on('error', (err) => {
+          console.error('PeerJS error:', err);
+          
+          if (err.type === 'peer-unavailable') {
+            alert('Game code not found or game has ended. Please check the code and try again.');
+          } else if (err.type === 'network') {
+            alert('Network error. Please check your internet connection.');
+          } else if (err.type === 'unavailable-id') {
+            alert('This game code is already in use. Please try a different code.');
+          } else {
+            alert('Connection error: ' + err.message);
+          }
+          
+          // Re-enable buttons
+          hostGameBtn.disabled = false;
+          joinGameBtn.disabled = false;
+        });
+      }
+      
+      // Setup connection
+      function setupConnection(conn) {
+        console.log('Setting up connection with:', conn.peer);
+        connections.push(conn);
+        
+        conn.on('open', () => {
+          console.log('Connection established with', conn.peer);
+          
+          // If host, send current game state
+          if (isHost) {
+            const newPlayer = {
+              id: conn.metadata.id,
+              name: conn.metadata.name
+            };
+            
+            // Add player to game state
+            gameState.players[newPlayer.id] = {
+              name: newPlayer.name,
+              score: 0,
+              words: []
+            };
+            
+            // Send full game state to new player
+            console.log('Sending game state to new player:', gameState);
+            conn.send({
+              type: 'game-state',
+              gameState: gameState
+            });
+            
+            // Send new player info to all other connections
+            sendToAllPeers({
+              type: 'player-joined',
+              player: newPlayer
+            }, conn.peer);
+            
+            // Update UI
+            updateGameUI();
+          }
+          
+          // When we receive data
+          conn.on('data', (data) => {
+            console.log('Received data:', data);
+            handleDataReceived(data, conn);
+          });
+          
+          // When connection closes
+          conn.on('close', () => {
+            console.log('Connection closed with', conn.peer);
+            connections = connections.filter(c => c.peer !== conn.peer);
+            
+            // If host, remove player from game state
+            if (isHost && conn.metadata) {
+              delete gameState.players[conn.metadata.id];
+              
+              // Notify other players
+              sendToAllPeers({
+                type: 'player-left',
+                playerId: conn.metadata.id,
+                playerName: conn.metadata.name
+              });
+              
+              showActivityNotification(`${conn.metadata.name} left the game`, 'info');
+              
+              // Update UI
+              updateGameUI();
+            }
+          });
+          
+          // Show game UI after successful connection
+          connectionSetup.classList.add('hidden');
+          gameContainer.classList.remove('hidden');
+          
+          showActivityNotification('Connected successfully!', 'success');
+        });
+        
+        // Handle connection errors
+        conn.on('error', (err) => {
+          console.error('Connection error:', err);
+          showActivityNotification('Connection error', 'error');
+        });
+      }
+      
+      // Handle data received
+      function handleDataReceived(data, conn) {
+        console.log('Received data:', data);
+        
+        switch (data.type) {
+          case 'game-state':
+            // Only non-hosts receive game state
+            if (!isHost) {
+              gameState = data.gameState;
+              
+              // If game already started, hide setup
+              if (gameState.gameStarted) {
+                connectionSetup.classList.add('hidden');
+              }
+              
+              updateGameUI();
+            }
+            break;
+            
+          case 'game-started':
+            // Game has been started by the host
+            if (!isHost) {
+              connectionSetup.classList.add('hidden');
+              showActivityNotification('Game started!', 'success');
+            }
+            break;
+            
+          case 'word-found':
+            if (isHost) {
+              // Host processes the found word
+              processWordFound(data);
+              
+              // CRITICAL FIX: Host relays to ALL peers, not excluding the sender
+              // This ensures ALL players see words found by ALL other players
+              sendToAllPeers(data);
+            } else {
+              // Non-hosts just update their UI
+              if (!gameState.foundWords.includes(data.word)) {
+                // Add word to found words
+                gameState.foundWords.push(data.word);
+                
+                // Update player score
+                if (!gameState.players[data.playerId]) {
+                  gameState.players[data.playerId] = {
+                    name: data.foundBy,
+                    score: 0,
+                    words: []
+                  };
+                }
+                
+                gameState.players[data.playerId].score += data.score;
+                gameState.players[data.playerId].words.push(data.word);
+                
+                // Update total score
+                gameState.totalScore += data.score;
+                
+                // Show notification for others' found words
+                if (data.playerId !== playerId) {
+                  showActivityNotification(`${data.foundBy} found "${data.word}" (+${data.score})`, 'success');
+                }
+                
+                // Update UI
+                updateGameUI();
+              }
+            }
+            break;
+            
+          case 'player-joined':
+            // Non-hosts receive player joined messages
+            if (!isHost) {
+              if (!gameState.players[data.player.id]) {
+                gameState.players[data.player.id] = {
+                  name: data.player.name,
+                  score: 0,
+                  words: []
+                };
+                
+                showActivityNotification(`${data.player.name} joined the game`, 'player');
+                
+                updateGameUI();
+              }
+            }
+            break;
+            
+          case 'player-left':
+            // Non-hosts receive player left messages
+            if (!isHost) {
+              if (gameState.players[data.playerId]) {
+                delete gameState.players[data.playerId];
+                
+                showActivityNotification(`${data.playerName} left the game`, 'info');
+                
+                updateGameUI();
+              }
+            }
+            break;
+        }
+      }
+      
+      // Send data to all connected peers
+      function sendToAllPeers(data, excludePeer = null) {
+        connections.forEach(conn => {
+          // Only exclude if specifically needed (not for word-found events)
+          if ((excludePeer === null || conn.peer !== excludePeer) && conn.open) {
+            console.log('Sending data to peer:', conn.peer, data);
+            conn.send(data);
+          }
+        });
+      }
+      
+      // Handle mobile touch events better
+      document.querySelectorAll('svg g').forEach(g => {
+        g.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          const textElement = e.currentTarget.querySelector('text');
+          if (textElement) {
+            addLetter(textElement.textContent);
+          }
+        });
+      });
+      
+      // Mobile keyboard optimization
+      wordInput.addEventListener('focus', () => {
+        if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+          // On mobile, scroll to make input visible when focused
+          setTimeout(() => {
+            wordInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 300);
+        }
+      });
+      
+      // Dark mode handling
+      function setDarkModeStyles() {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.querySelectorAll('svg use').forEach(use => {
+            if (use.getAttribute('fill') === '#E5E7EB') {
+              use.setAttribute('fill', '#374151');
+            }
+            use.setAttribute('stroke', '#FFFFFF');
+          });
+          
+          document.querySelectorAll('svg text').forEach(text => {
+            text.setAttribute('fill', '#FFFFFF');
+          });
+        }
+      }
+      
+      // Set dark mode styles on load and when preference changes
+      setDarkModeStyles();
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', setDarkModeStyles);
+    });
+  </script>
+</body>
+</html>
