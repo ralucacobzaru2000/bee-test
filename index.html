@@ -296,7 +296,7 @@
           Here are hints for all possible words. Found words are crossed out.
         </p>
         <div class="flex gap-2 mb-2">
-          <span class="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 px-2 py-1 rounded">Perfect Pangram</span>
+          <span class="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 px-2 py-1 rounded">Pangram</span>
           <span class="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 px-2 py-1 rounded">Pangram</span>
         </div>
       </div>
@@ -610,9 +610,9 @@
           
           let typeLabel = '';
           if (isPerfectPangram) {
-            typeLabel = '<span class="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 px-2 py-1 rounded mr-2">Perfect Pangram</span>';
+            typeLabel = '<span class="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 px-2 py-1 rounded mr-2">Pangram</span>';
           } else if (isPangram) {
-            typeLabel = '<span class="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 px-2 py-1 rounded mr-2">Pangram</span>';
+            typeLabel = '<span class="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 px-2 py-1 rounded mr-2">Pangram</span>';
           }
           
           const definition = wordDefinitions[word] || 'Definition not available';
@@ -715,7 +715,7 @@
         
         if (perfectPangrams.includes(word)) {
           wordScore = word.length + 7;  // Perfect pangram bonus
-          messageText = `Perfect pangram! +${wordScore}`;
+          messageText = `Pangram! +${wordScore}`;
         } else if (pangrams.includes(word)) {
           wordScore = word.length + 7;  // Pangram bonus
           messageText = `Pangram! +${wordScore}`;
@@ -847,7 +847,7 @@
               perfectPangrams.includes(word) 
                 ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' 
                 : pangrams.includes(word) 
-                  ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' 
+                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' 
                   : 'bg-gray-100 dark:bg-gray-700'
             }`;
             foundWordsContainer.appendChild(wordSpan);
