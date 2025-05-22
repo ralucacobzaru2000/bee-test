@@ -39,6 +39,73 @@
     .notification-animation {
       animation: fadeInOut 2s ease-in-out;
     }
+
+    /* Hint modal styles */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+    }
+
+    .modal.show {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-content {
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 90%;
+      max-height: 80%;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .modal-content {
+        background-color: #374151;
+        color: #e5e7eb;
+      }
+    }
+
+    .close-modal {
+      position: absolute;
+      top: 10px;
+      right: 15px;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+      color: #999;
+    }
+
+    .close-modal:hover {
+      color: #000;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .close-modal:hover {
+        color: #fff;
+      }
+    }
+
+    .hint-item {
+      padding: 8px;
+      margin: 4px 0;
+      border-radius: 4px;
+      border-left: 4px solid #fbbf24;
+    }
+
+    .hint-item.found {
+      opacity: 0.5;
+      text-decoration: line-through;
+    }
   </style>
 </head>
 <body class="bg-gray-50 font-sans dark-mode-support">
@@ -89,6 +156,15 @@
     
     <!-- Game UI (hidden until connected) -->
     <div id="game-container" class="hidden">
+      <!-- Host Controls -->
+      <div id="host-controls" class="hidden mb-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+        <h2 class="text-lg font-semibold mb-3">Host Controls</h2>
+        <div class="flex flex-wrap gap-2">
+          <button id="reset-game" class="bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700">Reset Game</button>
+          <button id="show-hints" class="bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700">Show Hints</button>
+        </div>
+      </div>
+
       <!-- Game Status Bar -->
       <div class="mb-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
         <div class="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full mb-2">
@@ -132,7 +208,10 @@
             </svg>
           </button>
         </div>
-        <button id="submit-btn" class="w-full mt-2 bg-yellow-500 text-white py-3 rounded-md hover:bg-yellow-600 text-lg">Enter</button>
+        <div class="flex gap-2 mt-2">
+          <button id="submit-btn" class="flex-1 bg-yellow-500 text-white py-3 rounded-md hover:bg-yellow-600 text-lg">Enter</button>
+          <button id="hints-btn" class="bg-blue-500 text-white py-3 px-4 rounded-md hover:bg-blue-600">💡 Hints</button>
+        </div>
       </div>
       
       <!-- Honeycomb Grid -->
@@ -207,12 +286,32 @@
     </div>
   </div>
 
+  <!-- Hints Modal -->
+  <div id="hints-modal" class="modal">
+    <div class="modal-content">
+      <span class="close-modal">&times;</span>
+      <h2 class="text-xl font-semibold mb-4">Word Hints</h2>
+      <div class="mb-4">
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+          Here are hints for all possible words. Found words are crossed out.
+        </p>
+        <div class="flex gap-2 mb-2">
+          <span class="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 px-2 py-1 rounded">Perfect Pangram</span>
+          <span class="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 px-2 py-1 rounded">Pangram</span>
+        </div>
+      </div>
+      <div id="hints-list" class="space-y-2 max-h-96 overflow-y-auto">
+        <!-- Hints will be populated here -->
+      </div>
+    </div>
+  </div>
+
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       // Game Data
       const wordList = [
         "ALLELE", "ALLURE", "ALLURER", "ALURE", "ANAL", "ANEAR", "ANNAL", "ANNEAL", 
-        "ANNEALER", "ANNUAL", "ANNUL", "ANNULAR", "AREA", "AREAL", "AREAR", "ARENA", 
+        "ANNEALER", "ALURE", "ANNUAL", "ANNUL", "ANNULAR", "AREA", "AREAL", "AREAR", "ARENA", 
         "ARENE", "ARERE", "ARREAR", "AURA", "AURAE", "AURAL", "AVENUE", "AVER", 
         "EARL", "EARN", "EARNER", "EAVE", "ELAN", "LANE", "LANNER", "LAREE", 
         "LARVA", "LARVAE", "LARVAL", "LAURAE", "LAUREL", "LAVA", "LAVE", "LAVEER", 
@@ -230,6 +329,153 @@
         "VEALER", "VELAR", "VENAL", "VENEREAL", "VENEREAN", "VENULA", "VENULAR", "VERA", 
         "VERLAN", "VERNAL", "VERRA", "VULVA", "VULVAE", "VULVAL", "VULVAR"
       ];
+
+      // Word definitions (simplified for demo)
+      const wordDefinitions = {
+        "ALLELE": "One of two or more alternative forms of a gene",
+        "ALLURE": "The quality of being powerfully attractive",
+        "ALLURER": "One who allures or entices",
+        "ALURE": "A gallery or corridor along the parapet of a castle",
+        "ANAL": "Relating to the anus",
+        "ANEAR": "Near to; close by",
+        "ANNAL": "A record of events year by year",
+        "ANNEAL": "Heat and slowly cool metal to remove stress",
+        "ANNEALER": "One who anneals metal",
+        "ANNUAL": "Occurring once every year",
+        "ANNUL": "To declare invalid or void",
+        "ANNULAR": "Having the form of a ring",
+        "AREA": "A region or space",
+        "AREAL": "Relating to an area",
+        "AREAR": "In or to the rear",
+        "ARENA": "A central area for sports or entertainment",
+        "ARENE": "An aromatic hydrocarbon",
+        "ARERE": "At or to the rear",
+        "ARREAR": "Money owed that should have been paid earlier",
+        "AURA": "A distinctive atmosphere surrounding a person",
+        "AURAE": "Plural of aura",
+        "AURAL": "Relating to hearing or the ear",
+        "AVENUE": "A wide street or thoroughfare",
+        "AVER": "To state or assert positively",
+        "EARL": "A British nobleman ranking above viscount",
+        "EARN": "To obtain money in return for work",
+        "EARNER": "One who earns money",
+        "EAVE": "The part of a roof that overhangs the wall",
+        "ELAN": "Energy, style, and enthusiasm",
+        "LANE": "A narrow road or path",
+        "LANNER": "A type of falcon",
+        "LAREE": "A former monetary unit",
+        "LARVA": "The immature form of an insect",
+        "LARVAE": "Plural of larva",
+        "LARVAL": "Relating to larvae",
+        "LAURAE": "Plural form of laura (monastery)",
+        "LAUREL": "An evergreen shrub with aromatic leaves",
+        "LAVA": "Hot molten rock from a volcano",
+        "LAVE": "To wash or bathe",
+        "LAVEER": "To sail against the wind",
+        "LAVER": "A basin for washing",
+        "LEALER": "More loyal or faithful",
+        "LEAN": "Having little fat; thin",
+        "LEANER": "More lean or thin",
+        "LEAR": "To learn (archaic)",
+        "LEARN": "To acquire knowledge or skills",
+        "LEARNER": "One who learns",
+        "LEAVE": "To go away from",
+        "LEAVEN": "A substance used to make dough rise",
+        "LEAVER": "One who leaves",
+        "LERNAEAN": "Of or relating to Lake Lerna",
+        "LERNEAN": "Alternative form of Lernaean",
+        "LUAU": "A Hawaiian feast",
+        "LUNA": "The moon (Latin)",
+        "LUNAR": "Relating to the moon",
+        "LUNULA": "A crescent-shaped mark",
+        "LUNULAE": "Plural of lunula",
+        "NAAN": "Indian flatbread",
+        "NANA": "Grandmother (informal)",
+        "NARE": "A nostril",
+        "NAVAL": "Relating to a navy or ships",
+        "NAVE": "The central part of a church",
+        "NAVEL": "The depression in the center of the belly",
+        "NEAR": "At a short distance",
+        "NEARER": "Closer in distance",
+        "NERAL": "A chemical compound",
+        "NERVAL": "Relating to nerves",
+        "NERVULAR": "Having small nerves or veins",
+        "NEURAL": "Relating to nerves or the nervous system",
+        "NEURULA": "An embryonic stage in development",
+        "NEURULAE": "Plural of neurula",
+        "NEURULAR": "Relating to the neurula stage",
+        "RALE": "An abnormal rattling sound when breathing",
+        "RANEE": "An Indian queen or princess",
+        "RARE": "Uncommon or unusual",
+        "RAREE": "A peep show or street show",
+        "RARER": "More uncommon",
+        "RAVE": "To speak wildly or enthusiastically",
+        "RAVEL": "To untangle or become tangled",
+        "RAVELER": "One who ravels",
+        "RAVELLER": "Alternative spelling of raveler",
+        "RAVEN": "A large black bird",
+        "RAVENALA": "The traveler's palm",
+        "RAVENER": "One who ravens or devours",
+        "RAVER": "One who raves",
+        "REAL": "Actually existing; genuine",
+        "REALER": "More real (informal)",
+        "REAN": "To raise up (archaic)",
+        "REAR": "The back part of something",
+        "REARER": "One who rears or raises",
+        "REAVE": "To rob or plunder",
+        "REAVER": "One who reaves",
+        "REEARN": "To earn again",
+        "RELEARN": "To learn again",
+        "RENAL": "Relating to the kidneys",
+        "RERAN": "Past tense of rerun",
+        "REVALUE": "To assess the value again",
+        "REVEAL": "To make known or show",
+        "REVEALER": "One who reveals",
+        "REVENUAL": "Relating to revenue",
+        "RURAL": "Relating to the countryside",
+        "ULNA": "The bone in the forearm",
+        "ULNAE": "Plural of ulna",
+        "ULNAR": "Relating to the ulna",
+        "ULNARE": "A bone in the wrist",
+        "UNLEARN": "To discard knowledge",
+        "UNRAVEL": "To undo or solve",
+        "UNRAVELER": "One who unravels",
+        "UNREAL": "Not real; imaginary",
+        "UNREAVE": "To undo reaving",
+        "URARE": "A type of poison",
+        "UREA": "A waste product in urine",
+        "UREAL": "Relating to urea",
+        "URENA": "A genus of plants",
+        "UVEA": "The middle layer of the eye",
+        "UVULA": "The fleshy projection in the throat",
+        "UVULAE": "Plural of uvula",
+        "UVULAR": "Relating to the uvula",
+        "VALE": "A valley",
+        "VALUE": "The worth or importance of something",
+        "VALUER": "One who determines value",
+        "VALVE": "A device controlling flow",
+        "VANE": "A device showing wind direction",
+        "VANNER": "One who operates a winnowing fan",
+        "VARE": "A rod or staff (archaic)",
+        "VARVE": "An annual layer of sediment",
+        "VARVEL": "A ring on a hawk's leg",
+        "VEAL": "Meat from a young calf",
+        "VEALER": "A calf raised for veal",
+        "VELAR": "Relating to the soft palate",
+        "VENAL": "Showing corrupt willingness to accept bribes",
+        "VENEREAL": "Relating to sexual desire or disease",
+        "VENEREAN": "Alternative form of venereal",
+        "VENULA": "A small vein",
+        "VENULAR": "Relating to venules",
+        "VERA": "True (Latin)",
+        "VERLAN": "A form of French slang",
+        "VERNAL": "Relating to spring",
+        "VERRA": "Very (dialect)",
+        "VULVA": "Female external genital organ",
+        "VULVAE": "Plural of vulva",
+        "VULVAL": "Relating to the vulva",
+        "VULVAR": "Alternative form of vulval"
+      };
 
       // Game letters
       const centerLetter = 'A';
@@ -288,10 +534,14 @@
       const customIdInput = document.getElementById('custom-id-input');
       const useCustomIdBtn = document.getElementById('use-custom-id');
       const startGameBtn = document.getElementById('start-game');
+      const hostControls = document.getElementById('host-controls');
+      const resetGameBtn = document.getElementById('reset-game');
+      const showHintsBtn = document.getElementById('show-hints');
       
       const wordInput = document.getElementById('word-input');
       const clearBtn = document.getElementById('clear-btn');
       const submitBtn = document.getElementById('submit-btn');
+      const hintsBtn = document.getElementById('hints-btn');
       const messageContainer = document.getElementById('message-container');
       const foundWordsContainer = document.getElementById('found-words');
       const playersListContainer = document.getElementById('players-list');
@@ -305,6 +555,102 @@
       const pangramsDisplay = document.getElementById('pangrams-display');
       const foundCountDisplay = document.getElementById('found-count');
       
+      const hintsModal = document.getElementById('hints-modal');
+      const hintsList = document.getElementById('hints-list');
+      const closeModal = document.querySelector('.close-modal');
+
+      // Reset game function (host only)
+      function resetGame() {
+        if (!isHost) return;
+        
+        if (confirm('Are you sure you want to reset the game? This will clear all progress.')) {
+          // Reset game state
+          gameState = {
+            foundWords: [],
+            players: Object.fromEntries(
+              Object.entries(gameState.players).map(([id, player]) => [
+                id, 
+                { ...player, score: 0, words: [] }
+              ])
+            ),
+            totalScore: 0,
+            gameStarted: true
+          };
+          
+          // Send reset to all players
+          sendToAllPeers({
+            type: 'game-reset',
+            gameState: gameState
+          });
+          
+          // Update UI
+          updateGameUI();
+          showActivityNotification('Game has been reset!', 'info');
+        }
+      }
+      
+      // Show hints function
+      function showHints() {
+        // Sort words by length, then alphabetically
+        const sortedWords = [...wordList].sort((a, b) => {
+          if (a.length !== b.length) {
+            return a.length - b.length;
+          }
+          return a.localeCompare(b);
+        });
+        
+        hintsList.innerHTML = '';
+        
+        sortedWords.forEach(word => {
+          const hintDiv = document.createElement('div');
+          hintDiv.className = `hint-item ${gameState.foundWords.includes(word) ? 'found' : ''}`;
+          
+          const isPerfectPangram = perfectPangrams.includes(word);
+          const isPangram = pangrams.includes(word);
+          
+          let typeLabel = '';
+          if (isPerfectPangram) {
+            typeLabel = '<span class="text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 px-2 py-1 rounded mr-2">Perfect Pangram</span>';
+          } else if (isPangram) {
+            typeLabel = '<span class="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 px-2 py-1 rounded mr-2">Pangram</span>';
+          }
+          
+          const definition = wordDefinitions[word] || 'Definition not available';
+          const firstLetter = word.charAt(0);
+          const length = word.length;
+          
+          hintDiv.innerHTML = `
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                ${typeLabel}
+                <strong>${firstLetter}${'_'.repeat(length - 1)}</strong> (${length} letters)
+                <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">${definition}</div>
+              </div>
+            </div>
+          `;
+          
+          hintsList.appendChild(hintDiv);
+        });
+        
+        hintsModal.classList.add('show');
+      }
+      
+      // Modal event listeners
+      hintsBtn.addEventListener('click', showHints);
+      closeModal.addEventListener('click', () => {
+        hintsModal.classList.remove('show');
+      });
+      
+      hintsModal.addEventListener('click', (e) => {
+        if (e.target === hintsModal) {
+          hintsModal.classList.remove('show');
+        }
+      });
+      
+      // Host controls event listeners
+      resetGameBtn.addEventListener('click', resetGame);
+      showHintsBtn.addEventListener('click', showHints);
+
       // Initialize hexagon click handlers
       for (let i = 0; i < outerLetters.length; i++) {
         document.getElementById(`letter-${i}-hex`).addEventListener('click', () => {
@@ -623,7 +969,6 @@
           gameState.gameStarted = true;
           
           // Hide setup UI, but don't close the Peer connection
-          // This is critical - we still allow players to join after game starts
           connectionSetup.classList.add('hidden');
           
           // Send game started message to all players
@@ -654,16 +999,14 @@
         // Create peer with custom ID if provided
         if (asHost && customId) {
           peer = new Peer(customId, {
-            // Use a STUN server to help with NAT traversal
             config: {
               'iceServers': [
                 { urls: 'stun:stun.l.google.com:19302' }
               ]
             },
-            debug: 2 // More detailed logs
+            debug: 2
           });
         } else {
-          // For non-hosts, just create a random peer ID
           peer = new Peer(null, {
             config: {
               'iceServers': [
@@ -685,6 +1028,9 @@
             score: 0,
             words: []
           };
+          
+          // Show host controls
+          hostControls.classList.remove('hidden');
         }
         
         // When peer is open
@@ -692,19 +1038,15 @@
           console.log('Peer connection open with ID:', id);
           
           if (asHost) {
-            // For host, store the game code to use for joining
             myPeerIdInput.value = customId || id;
-            
             hostInfo.classList.remove('hidden');
             customIdForm.classList.add('hidden');
             hostGameBtn.disabled = false;
             joinGameBtn.disabled = false;
             gameContainer.classList.remove('hidden');
             updateGameUI();
-            
             showActivityNotification('Game created! Share the code with players', 'success');
           } else {
-            // For players, connect to the host using the provided game code
             const hostId = hostIdInput.value.trim();
             console.log('Connecting to host:', hostId);
             
@@ -718,10 +1060,7 @@
             
             if (conn) {
               setupConnection(conn);
-              
-              // Hide join form
               joinForm.classList.add('hidden');
-              
               showActivityNotification('Connecting to game...', 'info');
             } else {
               showActivityNotification('Failed to connect to game', 'error');
@@ -753,7 +1092,6 @@
             alert('Connection error: ' + err.message);
           }
           
-          // Re-enable buttons
           hostGameBtn.disabled = false;
           joinGameBtn.disabled = false;
         });
@@ -847,21 +1185,24 @@
         
         switch (data.type) {
           case 'game-state':
-            // Only non-hosts receive game state
             if (!isHost) {
               gameState = data.gameState;
-              
-              // If game already started, hide setup
               if (gameState.gameStarted) {
                 connectionSetup.classList.add('hidden');
               }
-              
               updateGameUI();
             }
             break;
             
+          case 'game-reset':
+            if (!isHost) {
+              gameState = data.gameState;
+              updateGameUI();
+              showActivityNotification('Host has reset the game!', 'info');
+            }
+            break;
+            
           case 'game-started':
-            // Game has been started by the host
             if (!isHost) {
               connectionSetup.classList.add('hidden');
               showActivityNotification('Game started!', 'success');
@@ -870,19 +1211,12 @@
             
           case 'word-found':
             if (isHost) {
-              // Host processes the found word
               processWordFound(data);
-              
-              // CRITICAL FIX: Host relays to ALL peers, not excluding the sender
-              // This ensures ALL players see words found by ALL other players
               sendToAllPeers(data);
             } else {
-              // Non-hosts just update their UI
               if (!gameState.foundWords.includes(data.word)) {
-                // Add word to found words
                 gameState.foundWords.push(data.word);
                 
-                // Update player score
                 if (!gameState.players[data.playerId]) {
                   gameState.players[data.playerId] = {
                     name: data.foundBy,
@@ -893,23 +1227,18 @@
                 
                 gameState.players[data.playerId].score += data.score;
                 gameState.players[data.playerId].words.push(data.word);
-                
-                // Update total score
                 gameState.totalScore += data.score;
                 
-                // Show notification for others' found words
                 if (data.playerId !== playerId) {
                   showActivityNotification(`${data.foundBy} found "${data.word}" (+${data.score})`, 'success');
                 }
                 
-                // Update UI
                 updateGameUI();
               }
             }
             break;
             
           case 'player-joined':
-            // Non-hosts receive player joined messages
             if (!isHost) {
               if (!gameState.players[data.player.id]) {
                 gameState.players[data.player.id] = {
@@ -917,22 +1246,17 @@
                   score: 0,
                   words: []
                 };
-                
                 showActivityNotification(`${data.player.name} joined the game`, 'player');
-                
                 updateGameUI();
               }
             }
             break;
             
           case 'player-left':
-            // Non-hosts receive player left messages
             if (!isHost) {
               if (gameState.players[data.playerId]) {
                 delete gameState.players[data.playerId];
-                
                 showActivityNotification(`${data.playerName} left the game`, 'info');
-                
                 updateGameUI();
               }
             }
@@ -943,7 +1267,6 @@
       // Send data to all connected peers
       function sendToAllPeers(data, excludePeer = null) {
         connections.forEach(conn => {
-          // Only exclude if specifically needed (not for word-found events)
           if ((excludePeer === null || conn.peer !== excludePeer) && conn.open) {
             console.log('Sending data to peer:', conn.peer, data);
             conn.send(data);
@@ -965,7 +1288,6 @@
       // Mobile keyboard optimization
       wordInput.addEventListener('focus', () => {
         if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-          // On mobile, scroll to make input visible when focused
           setTimeout(() => {
             wordInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }, 300);
@@ -988,7 +1310,6 @@
         }
       }
       
-      // Set dark mode styles on load and when preference changes
       setDarkModeStyles();
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', setDarkModeStyles);
     });
